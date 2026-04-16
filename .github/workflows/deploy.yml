@@ -20,29 +20,29 @@ jobs:
         working-directory: backend
         run: GOOS=linux GOARCH=amd64 go build -o main .
 
-      - name: Copy binary to EC2 BE via jump host
+      - name: Copy binary to FE
         uses: appleboy/scp-action@v0.1.4
         with:
-          host: ${{ secrets.BE_HOST }}
+          host: ${{ secrets.FE_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          proxy_host: ${{ secrets.FE_HOST }}
-          proxy_username: ubuntu
-          proxy_key: ${{ secrets.EC2_SSH_KEY }}
           source: "backend/main,backend/Dockerfile"
-          target: "/app/mari-antri"
-          strip_components: 0
+          target: "/tmp/be-deploy"
+          strip_components: 1
 
-      - name: Deploy BE to EC2
+      - name: Deploy BE via FE jump
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.BE_HOST }}
+          host: ${{ secrets.FE_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          proxy_host: ${{ secrets.FE_HOST }}
-          proxy_username: ubuntu
-          proxy_key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            scp -i ~/mari-antri-key-pair.pem -o StrictHostKeyChecking=no \
+              /tmp/be-deploy/main /tmp/be-deploy/Dockerfile \
+              ubuntu@${{ secrets.BE_HOST }}:/app/mari-antri/backend/
+            ssh -i ~/mari-antri-key-pair.pem -o StrictHostKeyChecking=no \
+              ubuntu@${{ secrets.BE_HOST }} 'bash -s' << 'ENDSSH'
+            chmod +x /app/mari-antri/backend/main
             cd /app/mari-antri/backend
             docker build -t mari-antri-be .
             docker stop mari-antri-be || true
@@ -57,6 +57,7 @@ jobs:
               -e DB_NAME=${{ secrets.DB_NAME }} \
               -e S3_BUCKET=${{ secrets.S3_BUCKET }} \
               mari-antri-be
+            ENDSSH
 
   deploy-frontend:
     name: Deploy Frontend

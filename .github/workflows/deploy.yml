@@ -76,7 +76,7 @@ jobs:
             cd /app/mari-antri/frontend
             git pull origin main
             docker build \
-              --build-arg VITE_API_URL=http://${{ secrets.BE_PRIVATE_IP }}:8080 \
+              --build-arg VITE_API_URL=/api \
               -t mari-antri-fe .
             docker stop mari-antri-fe || true
             docker rm mari-antri-fe || true

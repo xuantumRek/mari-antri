@@ -11,6 +11,28 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
+
+      - name: Build Go binary
+        working-directory: backend
+        run: GOOS=linux GOARCH=amd64 go build -o main .
+
+      - name: Copy binary to EC2 BE via jump host
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.BE_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          proxy_host: ${{ secrets.FE_HOST }}
+          proxy_username: ubuntu
+          proxy_key: ${{ secrets.EC2_SSH_KEY }}
+          source: "backend/main,backend/Dockerfile"
+          target: "/app/mari-antri"
+          strip_components: 0
+
       - name: Deploy BE to EC2
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -22,7 +44,6 @@ jobs:
           proxy_key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd /app/mari-antri/backend
-            git pull origin main
             docker build -t mari-antri-be .
             docker stop mari-antri-be || true
             docker rm mari-antri-be || true

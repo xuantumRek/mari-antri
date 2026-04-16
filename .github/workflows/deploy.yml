@@ -1,0 +1,65 @@
+name: Deploy MariAntri
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Deploy BE to EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.BE_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          proxy_host: ${{ secrets.FE_HOST }}
+          proxy_username: ubuntu
+          proxy_key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /app/mari-antri/backend
+            git pull origin main
+            docker build -t mari-antri-be .
+            docker stop mari-antri-be || true
+            docker rm mari-antri-be || true
+            docker run -d \
+              --name mari-antri-be \
+              --restart always \
+              -p 8080:8080 \
+              -e DB_USER=${{ secrets.DB_USER }} \
+              -e DB_PASS=${{ secrets.DB_PASS }} \
+              -e DB_HOST=${{ secrets.DB_HOST }} \
+              -e DB_NAME=${{ secrets.DB_NAME }} \
+              -e S3_BUCKET=${{ secrets.S3_BUCKET }} \
+              mari-antri-be
+
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    needs: deploy-backend
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Deploy FE to EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.FE_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /app/mari-antri/frontend
+            git pull origin main
+            docker build \
+              --build-arg VITE_API_URL=http://${{ secrets.BE_PRIVATE_IP }}:8080 \
+              -t mari-antri-fe .
+            docker stop mari-antri-fe || true
+            docker rm mari-antri-fe || true
+            docker run -d \
+              --name mari-antri-fe \
+              --restart always \
+              -p 80:80 \
+              mari-antri-fe
